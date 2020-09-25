@@ -12,7 +12,11 @@ import numpy as np
 import pandas as pd
 import os
 import argparse
+import datetime
+import tensorflow as tf
 from sklearn.preprocessing import OneHotEncoder, MinMaxScaler, StandardScaler
+import csv
+import codecs
 
 from keras.models import Sequential
 from keras.layers import Dense
@@ -36,16 +40,20 @@ def maybe_download(train_data,test_data):
 
     if not os.path.exists(train_data):
         print("downloading training data...")
-        df_train = pd.read_csv("http://mlr.cs.umass.edu/ml/machine-learning-databases/adult/adult.data",
+        df_train = pd.read_csv("https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.data",
             names=COLUMNS, skipinitialspace=True)
+        df_train.to_csv("train.csv")
     else:
+        print("read training data...")
         df_train = pd.read_csv("train.csv")
 
     if not os.path.exists(test_data):
         print("downloading testing data...")
-        df_test = pd.read_csv("http://mlr.cs.umass.edu/ml/machine-learning-databases/adult/adult.test",
+        df_test = pd.read_csv("https://archive.ics.uci.edu/ml/machine-learning-databases/adult/adult.test",
             names=COLUMNS, skipinitialspace=True, skiprows=1)
+        df_test.to_csv("test.csv")
     else:
+        print("read test data...")
         df_test = pd.read_csv("test.csv")
 
     return df_train, df_test
@@ -87,7 +95,7 @@ def onehot(x):
 
 
 def embedding_input(name, n_in, n_out, reg):
-    inp = Input(shape=(1,), dtype='int64', name=name)
+    inp = Input(shape=(1,), dtype='int32', name=name)
     return inp, Embedding(n_in, n_out, input_length=1, embeddings_regularizer=l2(reg))(inp)
 
 
@@ -218,10 +226,22 @@ def deep(df_train, df_test, embedding_cols, cont_cols, target, model_type, metho
     embeddings_tensors = []
     n_factors = 8
     reg = 1e-3
+    '''
+    workclass_inp : 9
+    education_inp : 16
+    marital_status_inp : 7
+    occupation_inp : 15
+    relationship_inp : 6
+    race_inp : 5
+    gender_inp : 2
+    native_country_inp : 42
+    '''
     for ec in embedding_cols:
         layer_name = ec + '_inp'
         t_inp, t_build = embedding_input(
             layer_name, unique_vals[ec], n_factors, reg)
+        # print(layer_name)
+        # print(unique_vals[ec])
         embeddings_tensors.append((t_inp, t_build))
         del(t_inp, t_build)
 
@@ -307,24 +327,35 @@ def wide_deep(df_train, df_test, wide_cols, x_cols, embedding_cols, cont_cols, m
     wd_out = Dense(Y_tr_wd.shape[1], activation=activation, name='wide_deep')(wd_inp)
     wide_deep = Model(inputs=[w] + deep_inp_layer, outputs=wd_out)
     wide_deep.compile(optimizer='Adam', loss=loss, metrics=metrics)
-    wide_deep.fit(X_tr_wd, Y_tr_wd, epochs=5, batch_size=128)
+
+    log_dir = "logs/fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
+
+    wide_deep.fit(X_tr_wd, Y_tr_wd, epochs=5, batch_size=128, callbacks=[tensorboard_callback])
 
     # Maybe you want to schedule a second search with lower learning rate
     wide_deep.optimizer.lr = 0.0001
-    wide_deep.fit(X_tr_wd, Y_tr_wd, epochs=5, batch_size=128)
-
+    wide_deep.fit(X_tr_wd, Y_tr_wd, epochs=5, batch_size=128, callbacks=[tensorboard_callback])
+    # print(X_te_wd)
     results = wide_deep.evaluate(X_te_wd, Y_te_wd)
+    np.savetxt('data/wide.txt', X_test_wide)
+    np.savetxt('data/deep.txt', X_test_deep)
 
+    secRet = wide_deep.predict(X_te_wd)
+    print(secRet) # p: 0.5395552, n: 0.02082383
+
+    wide_deep.save("./model/", include_optimizer=True, save_format='tf')
+    # wide_deep.save_weights("./weights/", save_format='tf')
     print("\n", results)
 
 
 if __name__ == '__main__':
-
+    print(tf.__version__)
     ap = argparse.ArgumentParser()
     ap.add_argument("--method", type=str, default="logistic",help="fitting method")
     ap.add_argument("--model_type", type=str, default="wide_deep",help="wide, deep or both")
-    ap.add_argument("--train_data", type=str, default="train.csv")
-    ap.add_argument("--test_data", type=str, default="test.csv")
+    ap.add_argument("--train_data", type=str, default="data/train.csv")
+    ap.add_argument("--test_data", type=str, default="data/n.csv")
     args = vars(ap.parse_args())
     method = args["method"]
     model_type = args['model_type']
@@ -337,8 +368,8 @@ if __name__ == '__main__':
     fit_param['multiclass'] = ('softmax', 'categorical_crossentropy', 'accuracy')
 
     # df_train, df_test = maybe_download(train_data, test_data)
-    df_train = pd.read_csv("train.csv")
-    df_test = pd.read_csv("test.csv")
+    df_train = pd.read_csv(train_data)
+    df_test = pd.read_csv(test_data)
 
     # Add a feature to illustrate the logistic regression example
     df_train['income_label'] = (
@@ -356,7 +387,7 @@ if __name__ == '__main__':
 
     # columns for wide model
     wide_cols = ['workclass', 'education', 'marital_status', 'occupation',
-        'relationship', 'race', 'gender', 'native_country', 'age_group']
+                 'relationship', 'race', 'gender', 'native_country', 'age_group']
     x_cols = (['education', 'occupation'], ['native_country', 'occupation'])
 
     # columns for deep model
