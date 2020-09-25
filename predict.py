@@ -50,7 +50,7 @@ def wide(df_train, df_test, wide_cols, x_cols, target):
 if __name__ == '__main__':
     print(tf.__version__)
     ap = argparse.ArgumentParser()
-    ap.add_argument("--pb_file", type=str, default="model")
+    ap.add_argument("--pb_file", type=str, default="model_1_13/saved_model.h5")
     args = vars(ap.parse_args())
     pb_file = args["pb_file"]
 
@@ -66,10 +66,11 @@ if __name__ == '__main__':
     # out = em(6)
     # out = em(7)
     # out = em(8)
-    K.set_learning_phase(0)
-    print(tf.keras.backend.learning_phase())
-    model = tf.keras.models.load_model(pb_file)
-    model.summary()
+    # K.set_learning_phase(0)
+    # print(tf.keras.backend.learning_phase())
+    # model = tf.keras.models.load_model(pb_file)
+    model = tf.keras.models.load_model(pb_file, compile=False)
+    # model.summary()
     inp = model.input
     print(inp)
     output = model.output

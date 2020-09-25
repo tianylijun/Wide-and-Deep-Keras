@@ -17,6 +17,8 @@ import tensorflow as tf
 from sklearn.preprocessing import OneHotEncoder, MinMaxScaler, StandardScaler
 import csv
 import codecs
+from numpy.random import seed
+from tensorflow import set_random_seed
 
 from keras.models import Sequential
 from keras.layers import Dense
@@ -331,20 +333,24 @@ def wide_deep(df_train, df_test, wide_cols, x_cols, embedding_cols, cont_cols, m
     log_dir = "logs/fit/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, histogram_freq=1)
 
-    wide_deep.fit(X_tr_wd, Y_tr_wd, epochs=5, batch_size=128, callbacks=[tensorboard_callback])
+    # wide_deep.fit(X_tr_wd, Y_tr_wd, epochs=5, batch_size=128, callbacks=[tensorboard_callback])
+    wide_deep.fit(X_tr_wd, Y_tr_wd, epochs=5, batch_size=128)
 
     # Maybe you want to schedule a second search with lower learning rate
-    wide_deep.optimizer.lr = 0.0001
-    wide_deep.fit(X_tr_wd, Y_tr_wd, epochs=5, batch_size=128, callbacks=[tensorboard_callback])
+    # wide_deep.optimizer.lr = 0.0001
+    # wide_deep.fit(X_tr_wd, Y_tr_wd, epochs=5, batch_size=128, callbacks=[tensorboard_callback])
+    wide_deep.fit(X_tr_wd, Y_tr_wd, epochs=5, batch_size=128)
     # print(X_te_wd)
     results = wide_deep.evaluate(X_te_wd, Y_te_wd)
     np.savetxt('data/wide.txt', X_test_wide)
     np.savetxt('data/deep.txt', X_test_deep)
 
     secRet = wide_deep.predict(X_te_wd)
-    print(secRet) # p: 0.5395552, n: 0.02082383
+    print(secRet) # p: 0.5188183 - 1.13.1
 
-    wide_deep.save("./model/", include_optimizer=True, save_format='tf')
+    wide_deep.summary()
+    wide_deep.save('./model_1_13/saved_model.h5')  # tf 1.15 use this
+    # wide_deep.save("./model/", include_optimizer=True, save_format='tf')  # tf 2.0+ use this
     # wide_deep.save_weights("./weights/", save_format='tf')
     print("\n", results)
 
@@ -355,12 +361,15 @@ if __name__ == '__main__':
     ap.add_argument("--method", type=str, default="logistic",help="fitting method")
     ap.add_argument("--model_type", type=str, default="wide_deep",help="wide, deep or both")
     ap.add_argument("--train_data", type=str, default="data/train.csv")
-    ap.add_argument("--test_data", type=str, default="data/n.csv")
+    ap.add_argument("--test_data", type=str, default="data/p.csv")
     args = vars(ap.parse_args())
     method = args["method"]
     model_type = args['model_type']
     train_data = args['train_data']
     test_data = args['test_data']
+
+    seed(1)
+    tf.set_random_seed(-1)
 
     fit_param = dict()
     fit_param['logistic']   = ('sigmoid', 'binary_crossentropy', 'accuracy')
